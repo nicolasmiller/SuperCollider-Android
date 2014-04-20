@@ -156,8 +156,6 @@ struct RandID : public Unit
 
 extern "C"
 {
-	void load(InterfaceTable *inTable);
-
 	void WhiteNoise_next(WhiteNoise *unit, int inNumSamples);
 	void WhiteNoise_Ctor(WhiteNoise* unit);
 
@@ -227,6 +225,7 @@ extern "C"
 	void LFNoise2_Ctor(LFNoise2 *unit);
 
 	void RandSeed_next(RandSeed *unit, int inNumSamples);
+	void RandSeed_next_k(RandSeed *unit, int inNumSamples);
 	void RandSeed_Ctor(RandSeed *unit);
 
 	void RandID_next(RandID *unit, int inNumSamples);
@@ -470,7 +469,7 @@ void Crackle_Ctor(Crackle* unit)
 {
 	SETCALC(Crackle_next);
 
-	unit->m_y1 = 0.3f;
+	unit->m_y1 = unit->mParent->mRGen->drand();
 	unit->m_y2 = 0.f;
 
 	Crackle_next(unit, 1);
@@ -746,12 +745,12 @@ void CoinGate_next(CoinGate* unit, int inNumSamples)
 {
 	float *trig = ZIN(1);
 	float *out = ZOUT(0);
-	float level = 0.f;
 	float prevtrig = unit->m_trig;
 	float probability = ZIN0(0);
 	RGen& rgen = *unit->mParent->mRGen;
 	LOOP1(inNumSamples,
 		float curtrig = ZXP(trig);
+		float level = 0.f;
 		if (prevtrig <= 0.f && curtrig > 0.f) {
 			if(rgen.frand() < probability) {
 					level = curtrig;
@@ -771,21 +770,45 @@ void CoinGate_next(CoinGate* unit, int inNumSamples)
 void RandSeed_Ctor(RandSeed* unit)
 {
 	unit->m_trig = 0.;
-	SETCALC(RandSeed_next);
+	if(unit->mCalcRate == calc_FullRate){ SETCALC(RandSeed_next); } else { SETCALC(RandSeed_next_k); }
 	RandSeed_next(unit, 1);
 }
 
-void RandSeed_next(RandSeed* unit, int inNumSamples)
+void RandSeed_next_k(RandSeed* unit, int inNumSamples)
 {
 	float trig = ZIN0(0);
 
 	if (trig > 0.f && unit->m_trig <= 0.f) {
 		RGen& rgen = *unit->mParent->mRGen;
-		int seed = (int)ZIN0(1);
+		int seed = (int)DEMANDINPUT_A(1, inNumSamples);
 		rgen.init(seed);
 	}
 	unit->m_trig = trig;
 	ZOUT0(0) = 0.f;
+}
+
+void RandSeed_next(RandSeed* unit, int inNumSamples)
+{
+	float *trig = ZIN(0);
+	float *out = ZOUT(0);
+
+	float prevtrig = unit->m_trig;
+	float curtrig;
+
+	LOOP1(inNumSamples,
+
+		curtrig = ZXP(trig);
+		if (curtrig > 0.f && prevtrig <= 0.f) {
+			RGen& rgen = *unit->mParent->mRGen;
+			int seed = (int)DEMANDINPUT_A(1, inNumSamples);
+			rgen.init(seed);
+		}
+		prevtrig = curtrig;
+		ZXP(out) = 0.f;
+
+	)
+
+	unit->m_trig = curtrig;
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -965,14 +988,38 @@ void LFNoise0_next(LFNoise0 *unit, int inNumSamples)
 	RPUT
 }
 
+void LFNoise0_next_1(LFNoise0 *unit, int inNumSamples)
+{
+	assert(inNumSamples == 1);
+	float freq = ZIN0(0);
+	float level = unit->mLevel;
+	int32 counter = unit->mCounter;
+
+	if (counter<=0) {
+		counter = (int32)(unit->mRate->mSampleRate / sc_max(freq, .001f));
+		counter = sc_max(1, counter);
+		RGET
+		level = frand2(s1,s2,s3);
+		unit->mLevel = level;
+		RPUT
+	}
+	ZOUT0(0) = level;
+	counter -= 1;
+	unit->mCounter = counter;
+}
+
+
 void LFNoise0_Ctor(LFNoise0* unit)
 {
-	SETCALC(LFNoise0_next);
+	if (BUFLENGTH == 1)
+		SETCALC(LFNoise0_next_1);
+	else
+		SETCALC(LFNoise0_next);
 
 	unit->mCounter = 0;
 	unit->mLevel = 0.f;
 
-	LFNoise0_next(unit, 1);
+	LFNoise0_next_1(unit, 1);
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////

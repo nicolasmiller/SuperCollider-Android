@@ -20,12 +20,12 @@
 #include "OSCMessages.h"
 OSCMessages::OSCMessages(){ }
 
-size_t OSCMessages::parameterMessage(small_scpacket *packet, const char* name, float value){
+size_t OSCMessages::parameterMessage(small_scpacket *packet, CFStringRef name, float value){
     packet->reset();
-//    CFIndex bufLength = CFStringGetMaximumSizeForEncoding(CFStringGetLength(name), kCFStringEncodingUTF8) + 1;
-//    char* buf = (char*) malloc(bufLength);
-//	CFStringGetCString(name, buf, bufLength, kCFStringEncodingUTF8);
-    size_t nameSize = ((strlen(name)+ 4) >> 2)*4;
+    CFIndex bufLength = CFStringGetMaximumSizeForEncoding(CFStringGetLength(name), kCFStringEncodingUTF8) + 1;
+    char* buf = (char*) malloc(bufLength);
+	CFStringGetCString(name, buf, bufLength, kCFStringEncodingUTF8);
+    size_t nameSize = ((strlen(buf)+ 4) >> 2)*4;
     size_t messageSize = nameSize + 24;
 	packet->adds("/n_set");
     packet->maketags(4);
@@ -33,10 +33,10 @@ size_t OSCMessages::parameterMessage(small_scpacket *packet, const char* name, f
     packet->addtag('i');
     packet->addi(kDefaultNodeId);
     packet->addtag('s');
-    packet->adds(name);
+    packet->adds(buf);
     packet->addtag('f');
     packet->addf(value);
-//    free (buf);
+    free (buf);
     return messageSize;
 }
 
@@ -75,21 +75,21 @@ small_scpacket OSCMessages::quitMessage(){
 }
 
 
-size_t OSCMessages::createSynthMessage(small_scpacket *packet, const char * name){
+size_t OSCMessages::createSynthMessage(small_scpacket *packet, CFStringRef name){
 	packet->reset();
-//    CFIndex bufLength = CFStringGetMaximumSizeForEncoding(CFStringGetLength(name), kCFStringEncodingUTF8) + 1;
-//    char* buf = (char*) malloc(bufLength);
-//	CFStringGetCString(name, buf, bufLength, kCFStringEncodingUTF8);
-    size_t nameSize = ((strlen(name)+ 4) >> 2)*4;
+    CFIndex bufLength = CFStringGetMaximumSizeForEncoding(CFStringGetLength(name), kCFStringEncodingUTF8) + 1;
+    char* buf = (char*) malloc(bufLength);
+	CFStringGetCString(name, buf, bufLength, kCFStringEncodingUTF8);
+    size_t nameSize = ((strlen(buf)+ 4) >> 2)*4;
     size_t messageSize = nameSize+16;
 	packet->adds("/s_new");
 	packet->maketags(3);
 	packet->addtag(',');
 	packet->addtag('s');
-	packet->adds(name);
+	packet->adds(buf);
 	packet->addtag('i');
 	packet->addi(kDefaultNodeId);
-//    free (buf);
+    free (buf);
     return messageSize;
 }
 

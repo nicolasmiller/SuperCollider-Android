@@ -1,7 +1,7 @@
 /*
-	SuperCollider real time audio synthesis system
+    SuperCollider real time audio synthesis system
     Copyright (c) 2002 James McCartney. All rights reserved.
-	http://www.audiosynth.com
+    http://www.audiosynth.com
 
     This program is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -18,12 +18,11 @@
     Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301  USA
 */
 
-
-#include "SC_Samp.h"
+#include "Samp.hpp"
 #include "SC_Constants.h"
-#include <stdlib.h>
 
 float32 gSine[kSineSize+1];
+float32 gPMSine[kSineSize+1];
 float32 gInvSine[kSineSize+1];
 float32 gSineWavetable[2*kSineSize];
 
@@ -33,7 +32,7 @@ void SignalAsWavetable(float32* signal, float32* wavetable, long inSize)
 
 	float32* in = signal;
 	float32* out = wavetable - 1;
-	for (int i=0; i<inSize; ++i) {
+	for (int i=0; i<inSize - 1; ++i) {
 		val1 = in[i];
 		val2 = in[i+1];
 		*++out = 2.f * val1 - val2;
@@ -45,44 +44,46 @@ void SignalAsWavetable(float32* signal, float32* wavetable, long inSize)
 	*++out = val2 - val1;
 }
 
-class AudioLibInit
+void WavetableAsSignal(float32* wavetable, float32* signal, long inSize)
+{
+	float32* in = wavetable - 1;
+	float32* out = signal - 1;
+	for (int i=0; i<inSize; ++i) {
+		float32 a = *++in;
+		float32 b = *++in;
+		*++out = a + b;
+	}
+}
+
+class SynthLibInit
 {
 public:
-	AudioLibInit();
+	SynthLibInit()
+	{
+		FillTables();
+	}
 
-	void FillTables();
+	void FillTables()
+	{
+		double sineIndexToPhase = twopi / kSineSize;
+		double pmf = (1L << 29) / twopi;
+		for (int i=0; i <= kSineSize; ++i) {
+			double phase = i * sineIndexToPhase;
+			float32 d = sin(phase);
+			gSine[i] = d;
+			gInvSine[i] = 1. / d;
+			gPMSine[i] = d * pmf;
+		}
+		SignalAsWavetable(gSine, gSineWavetable, kSineSize);
+
+		gInvSine[0] = gInvSine[kSineSize/2] = gInvSine[kSineSize] = kBadValue;
+		int sz = kSineSize;
+		int sz2 = sz>>1;
+		for (int  i=1; i<=8; ++i) {
+			gInvSine[i] = gInvSine[sz-i] = kBadValue;
+			gInvSine[sz2-i] = gInvSine[sz2+i] = kBadValue;
+		}
+	}
 };
 
-AudioLibInit gAudioLibInit;
-
-AudioLibInit::AudioLibInit()
-{
-	FillTables();
-}
-
-void AudioLibInit::FillTables()
-{
-	double sineIndexToPhase = twopi / kSineSize;
-	for (int i=0; i <= kSineSize; ++i) {
-		double phase = i * sineIndexToPhase;
-		float32 d = (float)sin(phase);
-		gSine[i] = d;
-        if( d == 0. )
-            gInvSine[i] = 0.;
-        else
-            gInvSine[i] = (float)(1. / d);
-	}
-	SignalAsWavetable(gSine, gSineWavetable, kSineSize);
-
-	gInvSine[0] = gInvSine[kSineSize/2] = gInvSine[kSineSize] = kBadValue;
-	int sz = kSineSize;
-	int sz2 = sz>>1;
-	for (int  i=1; i<=32; ++i) {
-		gInvSine[i] = gInvSine[sz-i] = kBadValue;
-		gInvSine[sz2-i] = gInvSine[sz2+i] = kBadValue;
-	}
-	//SignalAsWavetable(gInvSine, gInvSineWavetable, kSineSize);
-}
-
-
-
+static SynthLibInit gSynthLibInit;

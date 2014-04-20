@@ -18,15 +18,11 @@
     Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301  USA
 */
 
+#ifndef FFT_UGENS_H
+#define FFT_UGENS_H
 
 #include "SC_PlugIn.h"
 #include "SCComplex.h"
-
-#include "SC_fftlib.h"
-
-// not ready for altivec yet..
-#undef __VEC__
-#define __VEC__ 0
 
 #include <string.h>
 
@@ -42,10 +38,32 @@ struct SCPolarBuf
 	SCPolar bin[1];
 };
 
-SCPolarBuf* ToPolarApx(SndBuf *buf);
-SCComplexBuf* ToComplexApx(SndBuf *buf);
+static inline SCPolarBuf* ToPolarApx(SndBuf *buf)
+{
+	if (buf->coord == coord_Complex) {
+		SCComplexBuf* p = (SCComplexBuf*)buf->data;
+		int numbins = (buf->samples - 2) >> 1;
+		for (int i=0; i<numbins; ++i) {
+			p->bin[i].ToPolarApxInPlace();
+		}
+		buf->coord = coord_Polar;
+	}
 
+	return (SCPolarBuf*)buf->data;
+}
 
+static inline SCComplexBuf* ToComplexApx(SndBuf *buf)
+{
+	if (buf->coord == coord_Polar) {
+		SCPolarBuf* p = (SCPolarBuf*)buf->data;
+		int numbins = (buf->samples - 2) >> 1;
+		for (int i=0; i<numbins; ++i) {
+			p->bin[i].ToComplexApxInPlace();
+		}
+		buf->coord = coord_Complex;
+	}
+	return (SCComplexBuf*)buf->data;
+}
 
 struct PV_Unit : Unit
 {
@@ -74,7 +92,7 @@ struct PV_Unit : Unit
 		buf = world->mSndBufs + ibufnum; \
 	} \
 	LOCK_SNDBUF(buf); \
-	int numbins = buf->samples - 2 >> 1; \
+	int numbins = (buf->samples - 2) >> 1; \
 
 
 // for operation on two input buffers, result goes in first one.
@@ -112,7 +130,7 @@ struct PV_Unit : Unit
 	} \
 	LOCK_SNDBUF2(buf1, buf2); \
 	if (buf1->samples != buf2->samples) return; \
-	int numbins = buf1->samples - 2 >> 1;
+	int numbins = (buf1->samples - 2) >> 1;
 
 #define MAKE_TEMP_BUF \
 	if (!unit->m_tempbuf) { \
@@ -120,8 +138,6 @@ struct PV_Unit : Unit
 		unit->m_numbins = numbins; \
 	} else if (numbins != unit->m_numbins) return;
 
-
-
-//declared here so accessible to all target .cpp files
 extern InterfaceTable *ft;
 
+#endif

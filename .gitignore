@@ -12,4 +12,5 @@ tests/bin/**/*
 tests/gen/**/*
 # ignore mac cruft
 .DS_Store
-
+build.xml
+local.properties

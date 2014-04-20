@@ -23,6 +23,8 @@
 #define _SC_Prototypes_
 
 #include <ctype.h> // for size_t
+#include <cstdlib>
+#include <cstring>
 
 #include "SC_Types.h"
 #include "scsynthsend.h"
@@ -32,6 +34,7 @@
 // replacement for calloc.
 // calloc lazily zeroes memory on first touch. This is good for most purposes, but bad for realtime audio.
 void* zalloc(size_t n, size_t size);
+void zfree(void* ptr);
 
 ////////////////////////////////////////////////////////////////////////
 
@@ -40,7 +43,6 @@ void World_Start(World *inWorld);
 void World_SetSampleRate(struct World *inWorld, double inSampleRate);
 
 extern "C" {
-void World_Cleanup(World *inWorld);
 void* World_Alloc(struct World *inWorld, size_t inByteSize);
 void* World_Realloc(struct World *inWorld, void *inPtr, size_t inByteSize);
 void World_Free(struct World *inWorld, void *inPtr);
@@ -191,8 +193,8 @@ void Unit_ZeroOutputs(struct Unit *inUnit, int inNumSamples);
 void SendDone(struct ReplyAddress *inReply, const char *inCommandName);
 void SendDoneWithIntValue(struct ReplyAddress *inReply, const char *inCommandName, int value);
 void SendFailure(struct ReplyAddress *inReply, const char *inCommandName, const char *errString);
+void SendFailureWithIntValue(struct ReplyAddress *inReply, const char *inCommandName, const char *errString, uint32 index);
 void ReportLateness(struct ReplyAddress *inReply, float32 seconds);
-void DumpReplyAddress(struct ReplyAddress *inReplyAddress);
 int32 Hash(struct ReplyAddress *inReplyAddress);
 
 ////////////////////////////////////////////////////////////////////////

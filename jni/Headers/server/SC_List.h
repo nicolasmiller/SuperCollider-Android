@@ -199,7 +199,7 @@ void Link<T>::DebugDump()
 {
 	Link<T>* link = mNext;
 	while (link != this) {
-		//postbuf("Link-> %08X   next %08X   prev %08X\n",
+		//post("Link-> %08X   next %08X   prev %08X\n",
 		//	link, link->mNext, link->mPrev);
 		link = link->mNext;
 	}

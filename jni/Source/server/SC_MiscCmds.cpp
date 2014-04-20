@@ -20,7 +20,6 @@
 
 
 #include "SC_Lib.h"
-#include "SC_ComPort.h"
 #include "SC_CoreAudio.h"
 #include "SC_HiddenWorld.h"
 #include "SC_Graph.h"
@@ -33,6 +32,9 @@
 #include <new>
 #include "SC_Prototypes.h"
 #include "scsynthsend.h"
+#include "SC_WorldOptions.h"
+
+extern int gMissingNodeID;
 
 // returns number of bytes in an OSC string.
 int OSCstrlen(char *strin);
@@ -44,6 +46,7 @@ Node* Msg_GetNode(World *inWorld, sc_msg_iter& msg)
 	{
 		const char* loc = msg.gets();
 		int32 nodeID = msg.geti();
+		gMissingNodeID = nodeID;
 		node = World_GetNode(inWorld, nodeID);
 		while (*loc)
 		{
@@ -74,6 +77,7 @@ Node* Msg_GetNode(World *inWorld, sc_msg_iter& msg)
 	else
 	{
 		int32 nodeID = msg.geti();
+		gMissingNodeID = nodeID;
 		node = World_GetNode(inWorld, nodeID);
 	}
 	return node;
@@ -1079,7 +1083,6 @@ SCErr meth_n_after(World *inWorld, int inSize, char *inData, ReplyAddress* /*inR
 SCErr meth_n_order(World *inWorld, int inSize, char *inData, ReplyAddress *inReply);
 SCErr meth_n_order(World *inWorld, int inSize, char *inData, ReplyAddress* /*inReply*/)
 {
-	SCErr err;
 
 	Node *prevNode = 0;
 	Node *node = 0;
@@ -1302,7 +1305,9 @@ SCErr meth_quit(World *inWorld, int inSize, char *inData, ReplyAddress *inReply)
 SCErr meth_clearSched(World *inWorld, int inSize, char *inData, ReplyAddress *inReply);
 SCErr meth_clearSched(World *inWorld, int inSize, char *inData, ReplyAddress *inReply)
 {
-	inWorld->hw->mAudioDriver->ClearSched();
+	if(inWorld->mRealTime){
+		inWorld->hw->mAudioDriver->ClearSched();
+	}
 	return kSCErr_None;
 }
 
@@ -1732,7 +1737,7 @@ SCErr meth_s_getn(World *inWorld, int inSize, char *inData, ReplyAddress* inRepl
 
 	// figure out how many tags to allocate
 	int numcontrols = 0;
-	int numheads = msg.tags ? strlen(msg.tags) - 1 >> 1 : msg.remain() >> 3;
+	int numheads = msg.tags ? (strlen(msg.tags) - 1) >> 1 : msg.remain() >> 3;
 
 	while (msg.remain()) {
 		msg.geti(); // skip start
@@ -1870,9 +1875,9 @@ void initMiscCommands()
 	//NEW_COMMAND(n_cmd);
 	NEW_COMMAND(n_map);
 	NEW_COMMAND(n_mapn);
-        NEW_COMMAND(n_mapa);
-        NEW_COMMAND(n_mapan);
-        NEW_COMMAND(n_set);
+	NEW_COMMAND(n_mapa);
+	NEW_COMMAND(n_mapan);
+	NEW_COMMAND(n_set);
 	NEW_COMMAND(n_setn);
 	NEW_COMMAND(n_fill);
 
@@ -1928,5 +1933,3 @@ void initMiscCommands()
 
 	NEW_COMMAND(error);
 }
-
-

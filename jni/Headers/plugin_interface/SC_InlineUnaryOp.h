@@ -25,7 +25,17 @@
 #include "SC_Constants.h"
 
 #include <cmath>
+#include <limits>
 
+#ifdef __SSE__
+#include <xmmintrin.h>
+#endif
+
+#ifdef __SSE4_1__
+#include <smmintrin.h>
+#endif
+
+// FIXME: we should use better detection methods or remove c++98 support
 #if _XOPEN_SOURCE >= 600 || _ISOC99_SOURCE /* c99 compliant compiler */
 #define HAVE_C99
 #endif
@@ -46,10 +56,37 @@ inline float_type trunc(float_type arg)
 
 inline bool sc_isnan(float x)
 {
-#if defined(__cplusplus) && defined(__GNUC__) && _GLIBCXX_HAVE_ISNAN
+#if __cplusplus >= 201103L
 	return std::isnan(x);
 #else
 	return (!(x >= 0.f || x <= 0.f));
+#endif
+}
+
+inline bool sc_isnan(double x)
+{
+#if __cplusplus >= 201103L
+	return std::isnan(x);
+#else
+	return (!(x >= 0.0 || x <= 0.0));
+#endif
+}
+
+inline bool sc_isfinite(float x)
+{
+#if __cplusplus >= 201103L
+	return std::isfinite(x);
+#else
+	return !sc_isnan(x) && (std::abs(x) == std::numeric_limits<float>::infinity());
+#endif
+}
+
+inline bool sc_isfinite(double x)
+{
+#if __cplusplus >= 201103L
+	return std::isfinite(x);
+#else
+	return !sc_isnan(x) && (std::abs(x) != std::numeric_limits<double>::infinity());
 #endif
 }
 
@@ -75,7 +112,9 @@ inline float32 zapgremlins(float32 x)
 
 inline float32 sc_log2(float32 x)
 {
-#ifdef HAVE_C99
+#if __cplusplus >= 201103L
+	return std::log2(x);
+#elif defined(HAVE_C99)
 	return ::log2f(std::abs(x));
 #else
 	return static_cast<float32>(std::log(std::abs(x)) * (float32)rlog2);
@@ -236,6 +275,9 @@ inline float32 taylorsin(float32 x)
 
 inline float32 sc_trunc(float32 x)
 {
+#ifdef __SSE__
+	return (int)x;
+#endif
 #ifdef HAVE_C99
 	return truncf(x);
 #else
@@ -243,10 +285,52 @@ inline float32 sc_trunc(float32 x)
 #endif
 }
 
+
+inline float32 sc_ceil(float32 x)
+{
+#ifdef __SSE4_1__
+	__m128 a = _mm_set_ss(x);
+	const int cntrl = _MM_FROUND_TO_POS_INF;
+	__m128 b = _mm_round_ss(a, a, cntrl);
+	return _mm_cvtss_f32(b);
+#else
+	return std::ceil(x);
+#endif
+}
+
+inline float32 sc_floor(float32 x)
+{
+#ifdef __SSE4_1__
+	__m128 a = _mm_set_ss(x);
+	const int cntrl = _MM_FROUND_TO_NEG_INF;
+	__m128 b = _mm_round_ss(a, a, cntrl);
+	return _mm_cvtss_f32(b);
+#else
+	return std::floor(x);
+#endif
+}
+
+inline float32 sc_reciprocal(float32 x)
+{
+#ifdef __SSE__
+	// adapted from AP-803 Newton-Raphson Method with Streaming SIMD Extensions
+	// 23 bit accuracy (out of 24bit)
+	const __m128 arg = _mm_set_ss(x);
+	const __m128 approx = _mm_rcp_ss(arg);
+	const __m128 muls = _mm_mul_ss(_mm_mul_ss(arg, approx), approx);
+	const __m128 doubleApprox = _mm_add_ss(approx, approx);
+	const __m128 result = _mm_sub_ss(doubleApprox, muls);
+	return _mm_cvtss_f32(result);
+#else
+	return 1.f/x;
+#endif
+}
+
 inline float32 sc_frac(float32 x)
 {
-	return x - std::floor(x);
+	return x - sc_floor(x);
 }
+
 
 inline float32 sc_lg3interp(float32 x1, float32 a, float32 b, float32 c, float32 d)
 {
@@ -263,15 +347,20 @@ inline float32 sc_lg3interp(float32 x1, float32 a, float32 b, float32 c, float32
 
 inline float32 sc_CalcFeedback(float32 delaytime, float32 decaytime)
 {
-	if (delaytime == 0.f) {
+	if (delaytime == 0.f || decaytime == 0.f)
 		return 0.f;
-	} else if (decaytime > 0.f) {
+
+#ifdef HAVE_C99
+	float32 absret = static_cast<float32>(exp(log001 * delaytime / sc_abs(decaytime)));
+	float32 ret = copysignf(absret, decaytime);
+	return ret;
+#else
+	if (decaytime > 0.f)
 		return static_cast<float32>(exp(log001 * delaytime / decaytime));
-	} else if (decaytime < 0.f) {
+	else
 		return static_cast<float32>(-exp(log001 * delaytime / -decaytime));
-	} else {
-		return 0.f;
-	}
+#endif
+
 }
 
 inline float32 sc_wrap1(float32 x)
@@ -463,12 +552,45 @@ inline float64 taylorsin(float64 x)
 
 inline float64 sc_trunc(float64 x)
 {
+#ifdef __SSE2__
+	return (long)(x);
+#endif
 	return trunc(x);
 }
 
+inline float64 sc_ceil(float64 x)
+{
+#ifdef __SSE4_1__
+	__m128d a = _mm_set_sd(x);
+	const int cntrl = _MM_FROUND_TO_POS_INF;
+	__m128d b = _mm_round_sd(a, a, cntrl);
+	return _mm_cvtsd_f64(b);
+#else
+	return std::ceil(x);
+#endif
+}
+
+inline float64 sc_floor(float64 x)
+{
+#ifdef __SSE4_1__
+	__m128d a = _mm_set_sd(x);
+	const int cntrl = _MM_FROUND_TO_NEG_INF;
+	__m128d b = _mm_round_sd(a, a, cntrl);
+	return _mm_cvtsd_f64(b);
+#else
+	return std::floor(x);
+#endif
+}
+
+inline float64 sc_reciprocal(float64 x)
+{
+	return 1. / x;
+}
+
+
 inline float64 sc_frac(float64 x)
 {
-	return x - std::floor(x);
+	return x - sc_floor(x);
 }
 
 inline float64 sc_wrap1(float64 x)

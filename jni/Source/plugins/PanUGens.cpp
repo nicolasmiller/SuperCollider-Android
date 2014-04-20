@@ -20,19 +20,18 @@
 
 
 #include "SC_PlugIn.h"
+#include "function_attributes.h"
 
 #ifdef NOVA_SIMD
+#include "simd_memory.hpp"
 #include "simd_binary_arithmetic.hpp"
 #include "simd_pan.hpp"
 #include "simd_mix.hpp"
-
-#ifdef __GNUC__
-#define inline_functions __attribute__ ((flatten))
-#else
-#define inline_functions
-#endif
+using nova::slope_argument;
 
 #endif
+
+using namespace std; // for math functions
 
 static InterfaceTable *ft;
 
@@ -101,16 +100,14 @@ struct DecodeB2 : public Unit
 
 extern "C"
 {
-	void load(InterfaceTable *inTable);
-
 	void LinPan2_next_ak(LinPan2 *unit, int inNumSamples);
 	void LinPan2_next_aa(LinPan2 *unit, int inNumSamples);
 	void LinPan2_Ctor(LinPan2* unit);
 
 	void Balance2_next_ak(Balance2 *unit, int inNumSamples);
 #ifdef NOVA_SIMD
-	inline_functions void Balance2_next_ak_nova(Balance2 *unit, int inNumSamples);
-	inline_functions void Balance2_next_ak_nova_64(Balance2 *unit, int inNumSamples);
+	FLATTEN void Balance2_next_ak_nova(Balance2 *unit, int inNumSamples);
+	FLATTEN void Balance2_next_ak_nova_64(Balance2 *unit, int inNumSamples);
 #endif
 	void Balance2_next_aa(Balance2 *unit, int inNumSamples);
 	void Balance2_Ctor(Balance2* unit);
@@ -141,6 +138,7 @@ extern "C"
 	void BiPanB2_Ctor(BiPanB2* unit);
 
 	void DecodeB2_next(DecodeB2 *unit, int inNumSamples);
+	void DecodeB2_next_nova(DecodeB2 *unit, int inNumSamples);
 	void vDecodeB2_next(DecodeB2 *unit, int inNumSamples);
 	void DecodeB2_Ctor(DecodeB2* unit);
 
@@ -155,8 +153,8 @@ extern "C"
 //////////////////////////////////////////////////////////////////////////////////////////////////
 
 #ifdef NOVA_SIMD
-inline_functions void LinPan2_next_ak_nova(LinPan2 *unit, int inNumSamples);
-inline_functions void LinPan2_next_ak_nova_64(LinPan2 *unit, int inNumSamples);
+FLATTEN void LinPan2_next_ak_nova(LinPan2 *unit, int inNumSamples);
+FLATTEN void LinPan2_next_ak_nova_64(LinPan2 *unit, int inNumSamples);
 #endif
 
 void LinPan2_Ctor(LinPan2 *unit)
@@ -318,7 +316,7 @@ void Balance2_Ctor(Balance2 *unit)
 	}
 	unit->m_pos = ZIN0(2);
 	unit->m_level = ZIN0(3);
-	int32 ipos = (int32)(1024.f * unit->m_pos + 1024.f);
+	int32 ipos = (int32)(1024.f * unit->m_pos + 1024.f + 0.5f);
 	ipos = sc_clip(ipos, 0, 2048);
 
 	unit->m_leftamp  = unit->m_level * ft->mSine[2048 - ipos];
@@ -338,7 +336,7 @@ void Balance2_next_ak(Balance2 *unit, int inNumSamples)
 	float rightamp = unit->m_rightamp;
 
 	if (pos != unit->m_pos || unit->m_level != level) {
-		int32 ipos = (int32)(1024.f * pos + 1024.f);
+		int32 ipos = (int32)(1024.f * pos + 1024.f + 0.5f);
 		ipos = sc_clip(ipos, 0, 2048);
 
 		float nextleftamp  = level * ft->mSine[2048 - ipos];
@@ -375,7 +373,7 @@ void Balance2_next_ak_nova(Balance2 *unit, int inNumSamples)
 	float rightamp = unit->m_rightamp;
 
 	if (pos != unit->m_pos || unit->m_level != level) {
-		int32 ipos = (int32)(1024.f * pos + 1024.f);
+		int32 ipos = (int32)(1024.f * pos + 1024.f + 0.5f);
 		ipos = sc_clip(ipos, 0, 2048);
 
 		float nextleftamp  = level * ft->mSine[2048 - ipos];
@@ -391,8 +389,8 @@ void Balance2_next_ak_nova(Balance2 *unit, int inNumSamples)
 		unit->m_rightamp = nextrightamp;
 
 		//nova::times_vec2_ramp_simd(OUT(0), IN(0), leftamp, leftampslope, OUT(1), IN(1), rightamp, rightampslope, inNumSamples);
-		nova::times_vec_simd(OUT(0), IN(0), leftamp, leftampslope, inNumSamples);
-		nova::times_vec_simd(OUT(1), IN(1), rightamp, rightampslope, inNumSamples);
+		nova::times_vec_simd(OUT(0), IN(0), slope_argument(leftamp, leftampslope), inNumSamples);
+		nova::times_vec_simd(OUT(1), IN(1), slope_argument(rightamp, rightampslope), inNumSamples);
 	} else {
 		//nova::times_vec2_simd(OUT(0), IN(0), leftamp, OUT(1), IN(1), rightamp, inNumSamples);
 		nova::times_vec_simd(OUT(0), IN(0), leftamp, inNumSamples);
@@ -408,7 +406,7 @@ void Balance2_next_ak_nova_64(Balance2 *unit, int inNumSamples)
 	float rightamp = unit->m_rightamp;
 
 	if (pos != unit->m_pos || unit->m_level != level) {
-		int32 ipos = (int32)(1024.f * pos + 1024.f);
+		int32 ipos = (int32)(1024.f * pos + 1024.f + 0.5f);
 		ipos = sc_clip(ipos, 0, 2048);
 
 		float nextleftamp  = level * ft->mSine[2048 - ipos];
@@ -424,8 +422,8 @@ void Balance2_next_ak_nova_64(Balance2 *unit, int inNumSamples)
 		unit->m_rightamp = nextrightamp;
 
 		//nova::times_vec2_ramp_simd(OUT(0), IN(0), leftamp, leftampslope, OUT(1), IN(1), rightamp, rightampslope, inNumSamples);
-		nova::times_vec_simd(OUT(0), IN(0), leftamp, leftampslope, inNumSamples);
-		nova::times_vec_simd(OUT(1), IN(1), rightamp, rightampslope, inNumSamples);
+		nova::times_vec_simd(OUT(0), IN(0), slope_argument(leftamp, leftampslope), inNumSamples);
+		nova::times_vec_simd(OUT(1), IN(1), slope_argument(rightamp, rightampslope), inNumSamples);
 	} else {
 		//nova::times_vec2_simd(OUT(0), IN(0), leftamp, OUT(1), IN(1), rightamp, inNumSamples);
 		nova::times_vec_simd<64>(OUT(0), IN(0), leftamp);
@@ -448,7 +446,7 @@ void Balance2_next_aa(Balance2 *unit, int inNumSamples)
 	if (level != nextlevel) {
 		float levelSlope = (nextlevel - level) * unit->mRate->mSlopeFactor;
 		LOOP1(inNumSamples,
-			int32 ipos = (int32)(1024.f * ZXP(pos) + 1024.f);
+			int32 ipos = (int32)(1024.f * ZXP(pos) + 1024.f + 0.5f);
 			ipos = sc_clip(ipos, 0, 2048);
 
 			float leftamp  = level * sineTable[2048 - ipos];
@@ -460,7 +458,7 @@ void Balance2_next_aa(Balance2 *unit, int inNumSamples)
 		unit->m_level = level;
 	} else {
 		LOOP1(inNumSamples,
-			int32 ipos = (int32)(1024.f * ZXP(pos) + 1024.f);
+			int32 ipos = (int32)(1024.f * ZXP(pos) + 1024.f + 0.5f);
 			ipos = sc_clip(ipos, 0, 2048);
 
 			float leftamp  = level * sineTable[2048 - ipos];
@@ -474,8 +472,8 @@ void Balance2_next_aa(Balance2 *unit, int inNumSamples)
 ////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 #ifdef NOVA_SIMD
-inline_functions void XFade2_next_ak_nova(XFade2 *unit, int inNumSamples);
-inline_functions void XFade2_next_ak_nova_64(XFade2 *unit, int inNumSamples);
+FLATTEN void XFade2_next_ak_nova(XFade2 *unit, int inNumSamples);
+FLATTEN void XFade2_next_ak_nova_64(XFade2 *unit, int inNumSamples);
 #endif
 
 void XFade2_Ctor(XFade2 *unit)
@@ -494,7 +492,7 @@ void XFade2_Ctor(XFade2 *unit)
 	}
 	unit->m_pos = ZIN0(2);
 	unit->m_level = ZIN0(3);
-	int32 ipos = (int32)(1024.f * unit->m_pos + 1024.f);
+	int32 ipos = (int32)(1024.f * unit->m_pos + 1024.f + 0.5f);
 	ipos = sc_clip(ipos, 0, 2048);
 
 	unit->m_leftamp  = unit->m_level * ft->mSine[2048 - ipos];
@@ -513,7 +511,7 @@ void XFade2_next_ak(XFade2 *unit, int inNumSamples)
 	float rightamp = unit->m_rightamp;
 
 	if (pos != unit->m_pos || unit->m_level != level) {
-		int32 ipos = (int32)(1024.f * pos + 1024.f);
+		int32 ipos = (int32)(1024.f * pos + 1024.f + 0.5f);
 		ipos = sc_clip(ipos, 0, 2048);
 
 		float nextleftamp  = level * ft->mSine[2048 - ipos];
@@ -548,7 +546,7 @@ void XFade2_next_ak_nova(XFade2 *unit, int inNumSamples)
 	float rightamp = unit->m_rightamp;
 
 	if (pos != unit->m_pos || unit->m_level != level) {
-		int32 ipos = (int32)(1024.f * pos + 1024.f);
+		int32 ipos = (int32)(1024.f * pos + 1024.f + 0.5f);
 		ipos = sc_clip(ipos, 0, 2048);
 
 		float nextleftamp  = level * ft->mSine[2048 - ipos];
@@ -558,8 +556,8 @@ void XFade2_next_ak_nova(XFade2 *unit, int inNumSamples)
 		float leftampslope  = (nextleftamp  - leftamp)  * slopeFactor;
 		float rightampslope = (nextrightamp - rightamp) * slopeFactor;
 
-		nova::mix_vec_simd(OUT(0), IN(0), leftamp, leftampslope,
-						   IN(1), rightamp, rightampslope, inNumSamples);
+		nova::mix_vec_simd(OUT(0), IN(0), slope_argument(leftamp, leftampslope),
+						   IN(1), slope_argument(rightamp, rightampslope), inNumSamples);
 
 		unit->m_pos = pos;
 		unit->m_level = level;
@@ -577,7 +575,7 @@ void XFade2_next_ak_nova_64(XFade2 *unit, int inNumSamples)
 	float rightamp = unit->m_rightamp;
 
 	if (pos != unit->m_pos || unit->m_level != level) {
-		int32 ipos = (int32)(1024.f * pos + 1024.f);
+		int32 ipos = (int32)(1024.f * pos + 1024.f + 0.5f);
 		ipos = sc_clip(ipos, 0, 2048);
 
 		float nextleftamp  = level * ft->mSine[2048 - ipos];
@@ -587,8 +585,8 @@ void XFade2_next_ak_nova_64(XFade2 *unit, int inNumSamples)
 		float leftampslope  = (nextleftamp  - leftamp)  * slopeFactor;
 		float rightampslope = (nextrightamp - rightamp) * slopeFactor;
 
-		nova::mix_vec_simd<64>(OUT(0), IN(0), leftamp, leftampslope,
-								  IN(1), rightamp, rightampslope);
+		nova::mix_vec_simd<64>(OUT(0), IN(0), slope_argument(leftamp, leftampslope),
+								  IN(1), slope_argument(rightamp, rightampslope));
 
 		unit->m_pos = pos;
 		unit->m_level = level;
@@ -613,7 +611,7 @@ void XFade2_next_aa(XFade2 *unit, int inNumSamples)
 	if (level != nextlevel) {
 		float levelSlope = (nextlevel - level) * unit->mRate->mSlopeFactor;
 		LOOP1(inNumSamples,
-			int32 ipos = (int32)(1024.f * ZXP(pos) + 1024.f);
+			int32 ipos = (int32)(1024.f * ZXP(pos) + 1024.f + 0.5f);
 			ipos = sc_clip(ipos, 0, 2048);
 
 			float leftamp  = level * sineTable[2048 - ipos];
@@ -624,7 +622,7 @@ void XFade2_next_aa(XFade2 *unit, int inNumSamples)
 		unit->m_level = level;
 	} else {
 		LOOP1(inNumSamples,
-			int32 ipos = (int32)(1024.f * ZXP(pos) + 1024.f);
+			int32 ipos = (int32)(1024.f * ZXP(pos) + 1024.f + 0.5f);
 			ipos = sc_clip(ipos, 0, 2048);
 
 			float leftamp  = level * sineTable[2048 - ipos];
@@ -638,18 +636,18 @@ void XFade2_next_aa(XFade2 *unit, int inNumSamples)
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-void LinXFade2_Ctor(LinXFade2 *unit)
+void LinXFade2_next_i(LinXFade2 *unit, int inNumSamples)
 {
-	if (INRATE(2) == calc_FullRate) {
-		SETCALC(LinXFade2_next_a);
-	} else {
-		SETCALC(LinXFade2_next_k);
-	}
-	unit->m_pos = ZIN0(2);
-	unit->m_pos = sc_clip(unit->m_pos, -1.f, 1.f);
-	unit->m_amp = unit->m_pos * 0.5f + 0.5f;
+	float *out = ZOUT(0);
+	float *leftin = ZIN(0);
+	float *rightin = ZIN(1);
+	float amp = unit->m_amp;
 
-	LinXFade2_next_a(unit, 1);
+	LOOP1(inNumSamples,
+		float l = ZXP(leftin);
+		float r = ZXP(rightin);
+		ZXP(out) = l + amp * (r - l);
+	);
 }
 
 void LinXFade2_next_k(LinXFade2 *unit, int inNumSamples)
@@ -700,6 +698,76 @@ void LinXFade2_next_a(LinXFade2 *unit, int inNumSamples)
 	);
 }
 
+#ifdef NOVA_SIMD
+
+FLATTEN void LinXFade2_next_i_nova(LinXFade2 *unit, int inNumSamples)
+{
+	float amp = unit->m_amp;
+	nova::mix_vec_simd(OUT(0), IN(0), amp, IN(1), 1.f - amp, inNumSamples);
+}
+
+FLATTEN void LinXFade2_next_k_nova(LinXFade2 *unit, int inNumSamples)
+{
+	float pos = ZIN0(2);
+	float amp = unit->m_amp;
+
+	if (pos != unit->m_pos) {
+		float oldAmpLeft  = amp;
+		float oldAmpRight = 1.f  - amp;
+
+		pos = sc_clip(pos, -1.f, 1.f);
+
+		float nextAmpLeft  = pos * 0.5f + 0.5f;
+		float nextAmpRight = 1.f - nextAmpLeft;
+
+		float leftSlope = CALCSLOPE(nextAmpLeft, oldAmpLeft);
+		float rightSlope = CALCSLOPE(nextAmpRight, oldAmpRight);
+
+		unit->m_amp = nextAmpLeft;
+		unit->m_pos = pos;
+		nova::mix_vec_simd(OUT(0), IN(0), nova::slope_argument(oldAmpLeft, leftSlope),
+						   IN(1), nova::slope_argument(oldAmpRight, rightSlope),
+						   inNumSamples);
+	} else
+		nova::mix_vec_simd(OUT(0), IN(0), amp, IN(1), 1.f - amp, inNumSamples);
+}
+
+#endif
+
+void LinXFade2_Ctor(LinXFade2 *unit)
+{
+	switch (INRATE(2)) {
+	case calc_FullRate:
+		SETCALC(LinXFade2_next_a);
+		break;
+
+	case calc_BufRate:
+#ifdef NOVA_SIMD
+		if (!(BUFLENGTH & 15))
+			SETCALC(LinXFade2_next_k_nova);
+		else
+#endif
+			SETCALC(LinXFade2_next_k);
+		break;
+
+	case calc_ScalarRate:
+#ifdef NOVA_SIMD
+		if (!(BUFLENGTH & 15))
+			SETCALC(LinXFade2_next_i_nova);
+		else
+#endif
+			SETCALC(LinXFade2_next_i);
+		break;
+	}
+
+	unit->m_pos = ZIN0(2);
+	unit->m_pos = sc_clip(unit->m_pos, -1.f, 1.f);
+	unit->m_amp = unit->m_pos * 0.5f + 0.5f;
+
+	LinXFade2_next_a(unit, 1);
+}
+
+
 ////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 void Pan2_next_ak(Pan2 *unit, int inNumSamples)
@@ -713,7 +781,7 @@ void Pan2_next_ak(Pan2 *unit, int inNumSamples)
 	float rightamp = unit->m_rightamp;
 
 	if (pos != unit->m_pos || unit->m_level != level) {
-		int32 ipos = (int32)(1024.f * pos + 1024.f);
+		int32 ipos = (int32)(1024.f * pos + 1024.f + 0.5f);
 		ipos = sc_clip(ipos, 0, 2048);
 
 		float nextleftamp  = level * ft->mSine[2048 - ipos];
@@ -752,7 +820,7 @@ void Pan2_next_ak_nova(Pan2 *unit, int inNumSamples)
 	float rightamp = unit->m_rightamp;
 
 	if (pos != unit->m_pos || unit->m_level != level) {
-		int32 ipos = (int32)(1024.f * pos + 1024.f);
+		int32 ipos = (int32)(1024.f * pos + 1024.f + 0.5f);
 		ipos = sc_clip(ipos, 0, 2048);
 
 		float nextleftamp  = level * ft->mSine[2048 - ipos];
@@ -781,7 +849,7 @@ void Pan2_next_ak_nova_64(Pan2 *unit, int inNumSamples)
 	float rightamp = unit->m_rightamp;
 
 	if (pos != unit->m_pos || unit->m_level != level) {
-		int32 ipos = (int32)(1024.f * pos + 1024.f);
+		int32 ipos = (int32)(1024.f * pos + 1024.f + 0.5f);
 		ipos = sc_clip(ipos, 0, 2048);
 
 		float nextleftamp  = level * ft->mSine[2048 - ipos];
@@ -804,61 +872,6 @@ void Pan2_next_ak_nova_64(Pan2 *unit, int inNumSamples)
 
 #endif
 
-#if __VEC__
-
-void vPan2_next_ak(Pan2 *unit, int inNumSamples)
-{
-	vfloat32 *vleftout = (vfloat32*)OUT(0);
-	vfloat32 *vrightout = (vfloat32*)OUT(1);
-	vfloat32 *vin = (vfloat32*)IN(0);
-	float pos = ZIN0(1);
-	float level = ZIN0(2);
-	float leftamp =  unit->m_leftamp;
-	float rightamp = unit->m_rightamp;
-	define_vzero;
-	int len = inNumSamples << 2;
-
-	if (pos != unit->m_pos || unit->m_level != level) {
-		int32 ipos = (int32)(1024.f * pos + 1024.f);
-		ipos = sc_clip(ipos, 0, 2048);
-
-		float nextleftamp  = level * ft->mSine[2048 - ipos];
-		float nextrightamp = level * ft->mSine[ipos];
-
-		float slopeFactor = unit->mRate->mSlopeFactor;
-		float leftampslope  = (nextleftamp  - leftamp)  * slopeFactor;
-		float rightampslope = (nextrightamp - rightamp) * slopeFactor;
-		vfloat32 vleftampslope = vload(4.f * leftampslope);
-		vfloat32 vrightampslope = vload(4.f * rightampslope);
-		vfloat32 vleftamp = vstart(leftamp, vleftampslope);
-		vfloat32 vrightamp = vstart(rightamp, vrightampslope);
-		for (int i=0; i<len; i+=16) {
-			vfloat32 zvin = vec_ld(i, vin);
-			vfloat32 vleft = vec_mul(zvin, vleftamp);
-			vfloat32 vright = vec_mul(zvin, vrightamp);
-			vec_st(vleft, i, vleftout);
-			vec_st(vright, i, vrightout);
-			vleftamp = vec_add(vleftamp, vleftampslope);
-			vrightamp = vec_add(vrightamp, vrightampslope);
-		}
-		unit->m_pos = pos;
-		unit->m_level = level;
-		unit->m_leftamp = nextleftamp;
-		unit->m_rightamp = nextrightamp;
-	} else {
-		vfloat32 vleftamp = vload(leftamp);
-		vfloat32 vrightamp = vload(rightamp);
-		for (int i=0; i<len; i+=16) {
-			vfloat32 zvin = vec_ld(i, vin);
-			vfloat32 vleft = vec_mul(zvin, vleftamp);
-			vfloat32 vright = vec_mul(zvin, vrightamp);
-			vec_st(vleft, i, vleftout);
-			vec_st(vright, i, vrightout);
-		}
-	}
-}
-
-#endif
 
 void Pan2_next_aa(Pan2 *unit, int inNumSamples)
 {
@@ -873,7 +886,7 @@ void Pan2_next_aa(Pan2 *unit, int inNumSamples)
 		float levelSlope = (nextlevel - level) * unit->mRate->mSlopeFactor;
 
 		LOOP1(inNumSamples,
-			int32 ipos = (int32)(1024.f * ZXP(pos) + 1024.f);
+			int32 ipos = (int32)(1024.f * ZXP(pos) + 1024.f + 0.5f);
 			ipos = sc_clip(ipos, 0, 2048);
 
 			float leftamp  = level * ft->mSine[2048 - ipos];
@@ -886,7 +899,7 @@ void Pan2_next_aa(Pan2 *unit, int inNumSamples)
 		unit->m_level = level;
 	} else {
 		LOOP1(inNumSamples,
-			int32 ipos = (int32)(1024.f * ZXP(pos) + 1024.f);
+			int32 ipos = (int32)(1024.f * ZXP(pos) + 1024.f + 0.5f);
 			ipos = sc_clip(ipos, 0, 2048);
 
 			float leftamp  = level * ft->mSine[2048 - ipos];
@@ -903,13 +916,7 @@ void Pan2_Ctor(Pan2 *unit)
 	if (INRATE(1) == calc_FullRate) {
 		SETCALC(Pan2_next_aa);
 	} else {
-#if __VEC__
-		if (USEVEC) {
-			SETCALC(vPan2_next_ak);
-		} else {
-			SETCALC(Pan2_next_ak);
-		}
-#elif defined(NOVA_SIMD)
+#if defined(NOVA_SIMD)
 		if (BUFLENGTH == 64)
 			SETCALC(Pan2_next_ak_nova_64);
 		if (!(BUFLENGTH & 15))
@@ -923,7 +930,7 @@ void Pan2_Ctor(Pan2 *unit)
 
 	unit->m_pos = ZIN0(1);
 	unit->m_level = ZIN0(2);
-	int32 ipos = (int32)(1024.f * unit->m_pos + 1024.f);
+	int32 ipos = (int32)(1024.f * unit->m_pos + 1024.f + 0.5f);
 	ipos = sc_clip(ipos, 0, 2048);
 
 	unit->m_leftamp  = unit->m_level * ft->mSine[2048 - ipos];
@@ -965,12 +972,12 @@ void Pan4_Ctor(Pan4 *unit)
 		}
 	}
 
-	int32 ixpos = (int32)(1024.f * xpos + 1024.f);
+	int32 ixpos = (int32)(1024.f * xpos + 1024.f + 0.5f);
 	ixpos = sc_clip(ixpos, 0, 2048);
 	float leftamp  = ft->mSine[2048 - ixpos];
 	float rightamp = ft->mSine[ixpos];
 
-	int32 iypos = (int32)(1024.f * ypos + 1024.f);
+	int32 iypos = (int32)(1024.f * ypos + 1024.f + 0.5f);
 	iypos = sc_clip(iypos, 0, 2048);
 	float frontamp = ft->mSine[iypos];
 	float backamp  = ft->mSine[2048 - iypos];
@@ -1032,12 +1039,12 @@ void Pan4_next(Pan4 *unit, int inNumSamples)
 			}
 		}
 
-		int32 ixpos = (int32)(1024.f * xpos + 1024.f);
+		int32 ixpos = (int32)(1024.f * xpos + 1024.f + 0.5f);
 		ixpos = sc_clip(ixpos, 0, 2048);
 		float leftamp  = ft->mSine[2048 - ixpos];
 		float rightamp = ft->mSine[ixpos];
 
-		int32 iypos = (int32)(1024.f * ypos + 1024.f);
+		int32 iypos = (int32)(1024.f * ypos + 1024.f + 0.5f);
 		iypos = sc_clip(iypos, 0, 2048);
 		float frontamp = ft->mSine[iypos];
 		float backamp  = ft->mSine[2048 - iypos];
@@ -1239,17 +1246,15 @@ void PanB2_next(PanB2 *unit, int inNumSamples)
 	}
 }
 
-#if __VEC__
+#ifdef NOVA_SIMD
 
-void vPanB2_next(PanB2 *unit, int inNumSamples)
+FLATTEN void PanB2_next_nova(PanB2 *unit, int inNumSamples)
 {
-	vfloat32 *vWout = (vfloat32*)OUT(0);
-	vfloat32 *vXout = (vfloat32*)OUT(1);
-	vfloat32 *vYout = (vfloat32*)OUT(2);
-	vfloat32 *vin = (vfloat32*)IN(0);
-	define_vzero;
-	int len = inNumSamples << 2;
+	float *Wout = OUT(0);
+	float *Xout = OUT(1);
+	float *Yout = OUT(2);
 
+	float *in = IN(0);
 	float azimuth = ZIN0(1);
 	float level = ZIN0(2);
 
@@ -1277,53 +1282,30 @@ void vPanB2_next(PanB2 *unit, int inNumSamples)
 		float X_slope = CALCSLOPE(next_X_amp, X_amp);
 		float Y_slope = CALCSLOPE(next_Y_amp, Y_amp);
 
-		vfloat32 vW_slope = vload(4.f * W_slope);
-		vfloat32 vX_slope = vload(4.f * X_slope);
-		vfloat32 vY_slope = vload(4.f * Y_slope);
-		vfloat32 vW_amp = vstart(W_amp, vW_slope);
-		vfloat32 vX_amp = vstart(X_amp, vX_slope);
-		vfloat32 vY_amp = vstart(Y_amp, vY_slope);
+		nova::times_vec_simd(Wout, in, slope_argument(W_amp, W_slope), inNumSamples);
+		nova::times_vec_simd(Xout, in, slope_argument(X_amp, X_slope), inNumSamples);
+		nova::times_vec_simd(Yout, in, slope_argument(Y_amp, Y_slope), inNumSamples);
 
-		for (int i=0; i<len; i+=16) {
-			vfloat32 zvin = vec_ld(i, vin);
-			vec_st(vec_mul(zvin, vW_amp), i, vWout);
-			vec_st(vec_mul(zvin, vX_amp), i, vXout);
-			vec_st(vec_mul(zvin, vY_amp), i, vYout);
-			vW_amp = vec_add(vW_amp, vW_slope);
-			vX_amp = vec_add(vX_amp, vX_slope);
-			vY_amp = vec_add(vY_amp, vY_slope);
-		}
 		unit->m_W_amp = next_W_amp;
 		unit->m_X_amp = next_X_amp;
 		unit->m_Y_amp = next_Y_amp;
 	} else {
-		vfloat32 vW_amp = vload(W_amp);
-		vfloat32 vX_amp = vload(X_amp);
-		vfloat32 vY_amp = vload(Y_amp);
-
-		for (int i=0; i<len; i+=16) {
-			vfloat32 zvin = vec_ld(i, vin);
-			vec_st(vec_mul(zvin, vW_amp), i, vWout);
-			vec_st(vec_mul(zvin, vX_amp), i, vXout);
-			vec_st(vec_mul(zvin, vY_amp), i, vYout);
-		}
+		// TODO: can be further optimized by joining the loops
+		nova::times_vec_simd(Wout, in, W_amp, inNumSamples);
+		nova::times_vec_simd(Xout, in, X_amp, inNumSamples);
+		nova::times_vec_simd(Yout, in, Y_amp, inNumSamples);
 	}
 }
-
 #endif
-
 
 void PanB2_Ctor(PanB2 *unit)
 {
-#if __VEC__
-	if (USEVEC) {
-		SETCALC(vPanB2_next);
-	} else {
-		SETCALC(PanB2_next);
-	}
-#else
-	SETCALC(PanB2_next);
+#if defined(NOVA_SIMD)
+	if (!(BUFLENGTH & 15))
+		SETCALC(PanB2_next_nova);
+	else
 #endif
+		SETCALC(PanB2_next);
 
 	float azimuth = unit->m_azimuth = ZIN0(1);
 	float level = unit->m_level = ZIN0(2);
@@ -1473,6 +1455,10 @@ void calcPos(float pos, int numOutputs, float width, float orientation)
 }
 */
 
+#ifdef NOVA_SIMD
+void PanAz_next_ak_nova(PanAz *unit, int inNumSamples);
+#endif
+
 void PanAz_Ctor(PanAz *unit)
 {
 	if (INRATE(1) == calc_FullRate) {
@@ -1480,12 +1466,26 @@ void PanAz_Ctor(PanAz *unit)
 		SETCALC(PanAz_next_aa);
 	} else {
 		int numOutputs = unit->mNumOutputs;
-		unit->m_chanamp = (float*)RTAlloc(unit->mWorld, numOutputs*sizeof(float));
-		for (int i=0; i<numOutputs; ++i) {
-			unit->m_chanamp[i] = 0;
+		for (int i=0; i<numOutputs; ++i)
 			ZOUT0(i) = 0.f;
+
+		unit->m_chanamp = (float*)RTAlloc(unit->mWorld, numOutputs*sizeof(float));
+		if (!unit->m_chanamp) {
+			Print("PanAz: RT memory allocation failed\n");
+			SETCALC(ClearUnitOutputs);
+			return;
 		}
+
+		std::fill_n(unit->m_chanamp, numOutputs, 0);
+
+#ifdef NOVA_SIMD
+		if (!(BUFLENGTH & 15))
+			SETCALC(PanAz_next_ak_nova);
+		else
+			SETCALC(PanAz_next_ak);
+#else
 		SETCALC(PanAz_next_ak);
+#endif
 	}
 }
 
@@ -1503,9 +1503,9 @@ void PanAz_next_ak(PanAz *unit, int inNumSamples)
 	float orientation = ZIN0(4);
 
 	int numOutputs = unit->mNumOutputs;
-	float rwidth = 1.f / width;
+	float rwidth = sc_reciprocal( width );
 	float range = numOutputs * rwidth;
-	float rrange = 1.f / range;
+	float rrange = sc_reciprocal( range );
 
 	pos = pos * 0.5f * numOutputs + width * 0.5f + orientation;
 
@@ -1516,7 +1516,7 @@ void PanAz_next_ak(PanAz *unit, int inNumSamples)
 		float nextchanamp;
 		float chanpos = pos - i;
 		chanpos *= rwidth;
-		chanpos = chanpos - range * std::floor(rrange * chanpos);
+		chanpos = chanpos - range * sc_floor(rrange * chanpos);
 		if (chanpos > 1.f) {
 			nextchanamp = 0.f;
 		} else {
@@ -1534,7 +1534,7 @@ void PanAz_next_ak(PanAz *unit, int inNumSamples)
 				)
 			}
 		} else {
-			float chanampslope  = CALCSLOPE(nextchanamp, chanamp);
+			float chanampslope = CALCSLOPE(nextchanamp, chanamp);
 			float *in = zin0;
 			LOOP1(inNumSamples,
 				ZXP(out) = ZXP(in) * chanamp;
@@ -1545,6 +1545,51 @@ void PanAz_next_ak(PanAz *unit, int inNumSamples)
 	}
 }
 
+#ifdef NOVA_SIMD
+FLATTEN void PanAz_next_ak_nova(PanAz *unit, int inNumSamples)
+{
+	float pos = ZIN0(1);
+	float level = ZIN0(2);
+	float width = ZIN0(3);
+	float orientation = ZIN0(4);
+
+	int numOutputs = unit->mNumOutputs;
+	float rwidth = sc_reciprocal( width );
+	float range = numOutputs * rwidth;
+	float rrange = sc_reciprocal( range );
+
+	pos = pos * 0.5f * numOutputs + width * 0.5f + orientation;
+
+	float * __restrict__ in = IN(0);
+	float * __restrict__ chanamps = unit->m_chanamp;
+
+	for (int i=0; i<numOutputs; ++i) {
+		float chanamp = chanamps[i];
+		float nextchanamp;
+		float chanpos = pos - i;
+		chanpos *= rwidth;
+		chanpos = chanpos - range * sc_floor(rrange * chanpos);
+		if (chanpos > 1.f) {
+			nextchanamp = 0.f;
+		} else {
+			nextchanamp = level * ft->mSine[(long)(4096.f * chanpos)];
+		}
+
+		float *out = OUT(i);
+		if (nextchanamp == chanamp) {
+			if (nextchanamp == 0.f)
+				nova::zerovec_simd(out, inNumSamples);
+			else
+				nova::times_vec_simd(out, in, chanamp, inNumSamples);
+		} else {
+			float chanampslope  = CALCSLOPE(nextchanamp, chanamp);
+			nova::times_vec_simd(out, in, slope_argument(chanamp, chanampslope), inNumSamples);
+			chanamps[i] = nextchanamp;
+		}
+	}
+}
+#endif
+
 void PanAz_next_aa(PanAz *unit, int inNumSamples)
 {
 	float level = ZIN0(2);
@@ -1552,9 +1597,9 @@ void PanAz_next_aa(PanAz *unit, int inNumSamples)
 	float orientation = ZIN0(4);
 
 	int numOutputs = unit->mNumOutputs;
-	float rwidth = 1.f / width;
+	float rwidth = sc_reciprocal( width );
 	float range = numOutputs * rwidth;
-	float rrange = 1.f / range;
+	float rrange = sc_reciprocal( range );
 
 
 	// compute constant parts with which the pos has to be multiplied/added to respect numOutputs, width and orientation
@@ -1653,16 +1698,12 @@ void Rotate2_Ctor(Rotate2 *unit)
 
 void DecodeB2_Ctor(DecodeB2 *unit)
 {
-#if __VEC__
-	//if (USEVEC) {
-	if (0) {
-		SETCALC(vDecodeB2_next);
-	} else {
-		SETCALC(DecodeB2_next);
-	}
-#else
-	SETCALC(DecodeB2_next);
+#if defined(NOVA_SIMD)
+	if (!(BUFLENGTH & 15))
+		SETCALC(DecodeB2_next_nova);
+	else
 #endif
+		SETCALC(DecodeB2_next);
 
 	DecodeB2_next(unit, 1);
 
@@ -1705,44 +1746,45 @@ void DecodeB2_next(DecodeB2 *unit, int inNumSamples)
 	}
 }
 
-#if __VEC__
-
-void vDecodeB2_next(DecodeB2 *unit, int inNumSamples)
+#ifdef NOVA_SIMD
+void DecodeB2_next_nova(DecodeB2 *unit, int inNumSamples)
 {
-	float *Win = IN(0);
-	float *Xin = IN(1);
-	float *Yin = IN(2);
+	float *Win0 = IN(0);
+	float *Xin0 = IN(1);
+	float *Yin0 = IN(2);
 
-	float W_amp = unit->m_W_amp;
-	float X_amp = unit->m_X_amp;
-	float Y_amp = unit->m_Y_amp;
-	float X_tmp;
-	float cosa = unit->m_cosa;
-	float sina = unit->m_sina;
+	using namespace nova;
+	vec<float> W_amp = unit->m_W_amp;
+	vec<float> X_amp = unit->m_X_amp;
+	vec<float> Y_amp = unit->m_Y_amp;
+	vec<float> X_tmp;
+	vec<float> cosa = unit->m_cosa;
+	vec<float> sina = unit->m_sina;
 
 	int numOutputs = unit->mNumOutputs;
-	int len = inNumSamples >> 2;
-	define_vzero
-
+	int vs = vec<float>::size;
+	int loops = inNumSamples / vs;
 	for (int i=0; i<numOutputs; ++i) {
 		float *out = OUT(i);
-		vfloat32 vW_amp = vload(W_amp);
-		vfloat32 vX_amp = vload(X_amp);
-		vfloat32 vY_amp = vload(Y_amp);
-		for (int i=0; i<len; i+=16) {
-			vfloat32 vWin = vec_ld(i, Win);
-			vfloat32 vXin = vec_ld(i, Xin);
-			vfloat32 vYin = vec_ld(i, Yin);
-			vfloat32 vout = vec_madd(vYin, vY_amp, vec_madd(vXin, vX_amp, vec_mul(vWin, vW_amp)));
-			vec_st(vout, i, out);
-		}
+		float *Win = Win0;
+		float *Xin = Xin0;
+		float *Yin = Yin0;
+
+		for (int j = 0; j != loops; ++j) {
+			vec<float> result, w, x, y;
+			w.load_aligned(Win); x.load_aligned(Xin); y.load_aligned(Yin);
+			result = w * W_amp + x * X_amp + y * Y_amp;
+			result.store_aligned(out);
+			out += vs; Win += vs; Xin += vs; Yin += vs;
+		};
+
 		X_tmp = X_amp * cosa + Y_amp * sina;
 		Y_amp = Y_amp * cosa - X_amp * sina;
 		X_amp = X_tmp;
 	}
 }
-
 #endif
+
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -1754,12 +1796,12 @@ PluginLoad(Pan)
 	DefineSimpleUnit(Pan2);
 	DefineSimpleUnit(Pan4);
 	DefineSimpleUnit(LinPan2);
-	DefineSimpleUnit(Balance2);
+	DefineSimpleCantAliasUnit(Balance2);
 	DefineSimpleUnit(Rotate2);
 	DefineSimpleUnit(XFade2);
 	DefineSimpleUnit(LinXFade2);
 	DefineSimpleUnit(PanB);
-	DefineSimpleUnit(PanB2);
+	DefineSimpleCantAliasUnit(PanB2);
 	DefineSimpleUnit(BiPanB2);
 	DefineDtorCantAliasUnit(PanAz);
 	DefineSimpleCantAliasUnit(DecodeB2);

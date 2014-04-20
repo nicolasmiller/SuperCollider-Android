@@ -22,17 +22,22 @@
 #ifndef _SC_Lock_
 #define _SC_Lock_
 
-#include <pthread.h>
+#include <chrono>
+#include <condition_variable>
+#include <mutex>
+#include <thread>
 
-class SC_Lock
-{
-public:
-	SC_Lock() { pthread_mutex_init (&mutex, NULL); }
-	~SC_Lock() { pthread_mutex_destroy (&mutex); }
-	void Lock() { pthread_mutex_lock (&mutex); }
-	void Unlock() { pthread_mutex_unlock (&mutex); }
-private:
-	pthread_mutex_t mutex;
-};
+typedef std::mutex SC_Lock;
+using std::mutex;
+using std::timed_mutex;
+using std::lock_guard;
+using std::unique_lock;
+using std::cv_status;
+typedef std::condition_variable_any condition_variable_any;
+using std::thread;
+namespace this_thread = std::this_thread;
+namespace chrono = std::chrono;
+
+typedef SC_Lock mutex;
 
 #endif
